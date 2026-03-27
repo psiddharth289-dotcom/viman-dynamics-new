@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIMAAN DYNAMICS | AEGIS</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Load Babel (Compiles React in the browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Load Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=Inter:wght@200;300;400;500&family=JetBrains+Mono:wght@100;400;700&display=swap');
+        
+        body, html { 
+            margin: 0; padding: 0; 
+            background-color: #000000; 
+            color: #e2e8f0; 
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            cursor: none;
+        }
+        
+        .font-display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .premium-bg { background: radial-gradient(circle at 50% 50%, #0a0a0c 0%, #000000 100%); }
+
+        .noise-overlay {
+            position: absolute; inset: 0; z-index: 40; pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.035'/%3E%3C/svg%3E");
+        }
+
+        .premium-panel {
+            background: rgba(255, 255, 255, 0.015);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+        }
+        
+        .text-gold { color: #E5C158; } 
+        .text-aerospace { color: #38bdf8; } 
+
+        .reveal-base { 
+            transition: opacity 1.6s cubic-bezier(0.16, 1, 0.3, 1), transform 1.6s cubic-bezier(0.16, 1, 0.3, 1); 
+            opacity: 0; 
+            transform: translateY(30px);
+            pointer-events: none; 
+        }
+        .reveal-active { 
+            opacity: 1; 
+            transform: translateY(0); 
+            pointer-events: auto; 
+        }
+
+        .boot-progress { animation: loadBar 3.5s cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+        @keyframes loadBar { 0% { width: 0%; } 100% { width: 100%; } }
+
+        .hairline-grid {
+            background-image: linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+            background-size: 150px 150px;
+        }
+
+        .radar-sweep {
+            background: conic-gradient(from 0deg, transparent 70%, rgba(56, 189, 248, 0.2) 100%);
+            animation: sweep 4s linear infinite;
+            border-radius: 50%;
+        }
+        @keyframes sweep { to { transform: rotate(360deg); } }
+        
+        ::-webkit-scrollbar { width: 0px; }
+
+        #custom-cursor {
+            position: fixed; top: 0; left: 0; width: 24px; height: 24px;
+            border: 1px solid rgba(255,255,255,0.3); border-radius: 50%;
+            pointer-events: none; z-index: 9999;
+            transform: translate(-50%, -50%);
+            transition: width 0.2s, height 0.2s, background 0.2s;
+            mix-blend-mode: difference;
+        }
+        #custom-cursor::after {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 2px; height: 2px;
+            background: white; border-radius: 50%; transform: translate(-50%, -50%);
+        }
+        .cursor-hover { width: 40px !important; height: 40px !important; background: rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useRef, useState, useEffect, useMemo } = React;
+
+        // --- Custom SVG Icons (Replaces external imports) ---
+        const Crosshair = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>;
+        const Radio = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>;
+        const Flame = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>;
+        const Package = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><line x1="16.5" y1="9.4" x2="7.5" y2="4.2"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>;
+        const MapIcon = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>;
+        const ArrowRight = ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
+
+        // --- PURE THREE.JS ENGINE ---
+        const ThreeCanvas = ({ scrollRef }) => {
+            const mountRef = useRef(null);
+
+            useEffect(() => {
+                if (!mountRef.current) return;
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 2, 12);
+                
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                mountRef.current.appendChild(renderer.domElement);
+
+                // Cinematic Lighting
+                scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+                
+                const keyLight = new THREE.SpotLight(0xfff5e6, 2, 0, Math.PI/4, 0.5, 2); 
+                keyLight.position.set(5, 8, 5);
+                scene.add(keyLight);
+                
+                const fillLight = new THREE.DirectionalLight(0x38bdf8, 1.5); 
+                fillLight.position.set(-5, 3, 5);
+                scene.add(fillLight);
+                
+                const backLight = new THREE.PointLight(0x38bdf8, 8, 20);
+                backLight.position.set(0, 1, -4);
+                scene.add(backLight);
+
+                // ATMOSPHERIC DUST PARTICLES
+                const particlesGeom = new THREE.BufferGeometry();
+                const particlesCount = 800;
+                const posArray = new Float32Array(particlesCount * 3);
+                for(let i = 0; i < particlesCount * 3; i++) {
+                    posArray[i] = (Math.random() - 0.5) * 20;
+                }
+                particlesGeom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+                const particlesMat = new THREE.PointsMaterial({
+                    size: 0.02, color: 0x38bdf8, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                });
+                const particlesMesh = new THREE.Points(particlesGeom, particlesMat);
+                scene.add(particlesMesh);
+
+                // Procedural Drone Geometry
+                const droneGroup = new THREE.Group();
+                scene.add(droneGroup);
+
+                const materials = {
+                    carbonMatte: new THREE.MeshStandardMaterial({ color: 0x222225, roughness: 0.7, metalness: 0.4 }), 
+                    aluminum: new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.2, metalness: 0.9 }),
+                    glass: new THREE.MeshPhysicalMaterial({ color: 0x111111, transmission: 0.9, opacity: 1, roughness: 0.05 }),
+                    accent: new THREE.MeshStandardMaterial({ color: 0xE5C158, roughness: 0.2, metalness: 0.9 }), 
+                };
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 2.0), materials.carbonMatte);
+                droneGroup.add(body);
+
+                const coreDetail = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 1.2), materials.aluminum);
+                coreDetail.position.set(0, 0.05, -0.2);
+                droneGroup.add(coreDetail);
+
+                const gimbalGroup = new THREE.Group();
+                gimbalGroup.position.set(0, -0.15, 1.1);
+                const gimbalArm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2), materials.aluminum);
+                gimbalArm.rotation.x = Math.PI / 2;
+                gimbalGroup.add(gimbalArm);
+                const lens = new THREE.Mesh(new THREE.SphereGeometry(0.15, 32, 32), materials.glass);
+                lens.position.set(0, -0.1, 0.1);
+                gimbalGroup.add(lens);
+                droneGroup.add(gimbalGroup);
+
+                const payload = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.8), materials.carbonMatte);
+                payload.position.set(0, -0.25, 0);
+                droneGroup.add(payload);
+
+                const rotors = [];
+                const armPositions = [ [-1, 1], [1, 1], [-1, -1], [1, -1] ];
+                
+                armPositions.forEach(pos => {
+                    const armGroup = new THREE.Group();
+                    armGroup.position.set(pos[0] * 1.3, 0, pos[1] * 1.3);
+
+                    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.08, 1.8), materials.carbonMatte);
+                    arm.position.set(-pos[0] * 0.65, 0, -pos[1] * 0.65);
+                    arm.rotation.set(0, Math.atan2(pos[0], pos[1]), Math.PI / 2);
+                    armGroup.add(arm);
+
+                    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.25, 32), materials.aluminum);
+                    motor.position.set(0, 0.1, 0);
+                    armGroup.add(motor);
+
+                    const accentRing = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.015, 16, 32), materials.accent);
+                    accentRing.position.set(0, 0.2, 0);
+                    accentRing.rotation.x = Math.PI / 2;
+                    armGroup.add(accentRing);
+
+                    const rotorGroup = new THREE.Group();
+                    rotorGroup.position.set(0, 0.25, 0);
+                    
+                    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.6 });
+                    const blade1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.01, 0.08), bladeMat);
+                    const blade2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.01, 0.08), bladeMat);
+                    blade2.rotation.y = Math.PI / 2;
+                    
+                    rotorGroup.add(blade1, blade2);
+                    armGroup.add(rotorGroup);
+                    rotors.push(rotorGroup);
+
+                    droneGroup.add(armGroup);
+                });
+
+                // Mouse Tracking
+                const mouse = new THREE.Vector2();
+                const handleMouseMove = (e) => {
+                    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                };
+                window.addEventListener('mousemove', handleMouseMove);
+
+                const clock = new THREE.Clock();
+                let animationFrameId;
+
+                const animate = () => {
+                    animationFrameId = requestAnimationFrame(animate);
+                    const time = clock.getElapsedTime();
+                    
+                    rotors.forEach(r => r.rotation.y += 0.8);
+                    droneGroup.position.y = Math.sin(time * 1.5) * 0.15;
+                    backLight.intensity = 5 + Math.sin(time * 2) * 3;
+
+                    particlesMesh.rotation.y = time * 0.02;
+                    particlesMesh.position.y = Math.sin(time * 0.5) * 0.2;
+
+                    let offset = 0;
+                    if (scrollRef.current) {
+                        const maxScroll = scrollRef.current.scrollHeight - scrollRef.current.clientHeight;
+                        offset = maxScroll > 0 ? scrollRef.current.scrollTop / maxScroll : 0;
+                    }
+
+                    const targetCamPos = new THREE.Vector3();
+                    const targetDroneRot = new THREE.Euler();
+
+                    if (offset < 0.16) { 
+                        const t = offset / 0.16;
+                        targetCamPos.set(THREE.MathUtils.lerp(0, 6, t), THREE.MathUtils.lerp(2, 1, t), THREE.MathUtils.lerp(12, 8, t));
+                        targetDroneRot.set(THREE.MathUtils.lerp(0, Math.PI/12, t), THREE.MathUtils.lerp(0, -Math.PI/3, t), 0);
+                    } 
+                    else if (offset < 0.33) { 
+                        const t = (offset - 0.16) / 0.17;
+                        targetCamPos.set(THREE.MathUtils.lerp(6, 4, t), THREE.MathUtils.lerp(1, 6, t), THREE.MathUtils.lerp(8, 6, t));
+                        targetDroneRot.set(THREE.MathUtils.lerp(Math.PI/12, Math.PI/6, t), THREE.MathUtils.lerp(-Math.PI/3, Math.PI/4, t), 0);
+                    }
+                    else if (offset < 0.50) { 
+                        const t = (offset - 0.33) / 0.17;
+                        targetCamPos.set(THREE.MathUtils.lerp(4, 0, t), THREE.MathUtils.lerp(6, 0.5, t), THREE.MathUtils.lerp(6, 5, t));
+                        targetDroneRot.set(THREE.MathUtils.lerp(Math.PI/6, 0, t), THREE.MathUtils.lerp(Math.PI/4, 0, t), 0);
+                    }
+                    else if (offset < 0.66) { 
+                        const t = (offset - 0.50) / 0.16;
+                        targetCamPos.set(THREE.MathUtils.lerp(0, 2, t), THREE.MathUtils.lerp(0.5, -4, t), THREE.MathUtils.lerp(5, 4, t));
+                        targetDroneRot.set(THREE.MathUtils.lerp(0, Math.PI/8, t), THREE.MathUtils.lerp(0, -Math.PI/6, t), 0);
+                    }
+                    else if (offset < 0.83) { 
+                        const t = (offset - 0.66) / 0.17;
+                        targetCamPos.set(THREE.MathUtils.lerp(2, 0, t), THREE.MathUtils.lerp(-4, 15, t), THREE.MathUtils.lerp(4, 0.1, t));
+                        targetDroneRot.set(THREE.MathUtils.lerp(Math.PI/8, 0, t), THREE.MathUtils.lerp(-Math.PI/6, 0, t), 0);
+                    }
+                    else { 
+                        const t = (offset - 0.83) / 0.17;
+                        targetCamPos.set(0, THREE.MathUtils.lerp(15, 8, t), THREE.MathUtils.lerp(0.1, 10, t));
+                        targetDroneRot.set(0, THREE.MathUtils.lerp(0, Math.PI * 1.5, t), 0); 
+                    }
+
+                    targetDroneRot.x += mouse.y * 0.15;
+                    targetDroneRot.y += mouse.x * 0.15;
+
+                    camera.position.lerp(targetCamPos, 0.04);
+                    camera.lookAt(0, 0, 0);
+                    
+                    droneGroup.rotation.x = THREE.MathUtils.lerp(droneGroup.rotation.x, targetDroneRot.x, 0.05);
+                    droneGroup.rotation.y = THREE.MathUtils.lerp(droneGroup.rotation.y, targetDroneRot.y, 0.05);
+
+                    renderer.render(scene, camera);
+                };
+
+                animate();
+
+                const handleResize = () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                };
+                window.addEventListener('resize', handleResize);
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    cancelAnimationFrame(animationFrameId);
+                    if (mountRef.current) mountRef.current.removeChild(renderer.domElement);
+                    renderer.dispose();
+                };
+            }, [scrollRef]);
+
+            return <div ref={mountRef} className="absolute inset-0 z-0 pointer-events-none" />;
+        };
+
+        const LiveTelemetry = () => {
+            const [data, setData] = useState({ p: '0.0', r: '0.0', y: '0.0', alt: '45.2' });
+            useEffect(() => {
+                let frame;
+                const updateData = () => {
+                    setData({
+                        p: (Math.random() * 2 - 1).toFixed(2),
+                        r: (Math.random() * 2 - 1).toFixed(2),
+                        y: (Math.random() * 0.5).toFixed(2),
+                        alt: (45 + Math.random() * 0.5).toFixed(2)
+                    });
+                    frame = requestAnimationFrame(() => setTimeout(updateData, 100));
+                };
+                updateData();
+                return () => cancelAnimationFrame(frame);
+            }, []);
+
+            return (
+                <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-8 font-mono text-[9px] text-white/30 tracking-widest text-right pointer-events-none z-50">
+                    <div><span className="block mb-1 text-aerospace">PITCH</span><span>{data.p}°</span></div>
+                    <div><span className="block mb-1 text-aerospace">ROLL</span><span>{data.r}°</span></div>
+                    <div><span className="block mb-1 text-aerospace">YAW</span><span>{data.y}°</span></div>
+                    <div><span className="block mb-1 text-gold">ALT AGL</span><span>{data.alt}m</span></div>
+                </div>
+            );
+        };
+
+        const HUDOverlay = () => (
+            <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-8 md:p-12 mix-blend-screen">
+                <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                        <span className="font-display font-medium text-lg tracking-[0.2em] text-white uppercase">Vimaan Dynamics</span>
+                    </div>
+                    <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                        <span className="font-mono text-[9px] tracking-widest text-white/70 uppercase">Global Auth</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-aerospace animate-pulse shadow-[0_0_8px_#38bdf8]"></div>
+                    </div>
+                </div>
+                <div className="flex justify-between items-end">
+                    <div className="flex flex-col gap-1 font-mono text-[10px] tracking-widest text-white/50 uppercase">
+                        <span>v.1.0.4. AEGIS</span>
+                        <span className="text-aerospace">Operational</span>
+                    </div>
+                    <div className="font-mono text-[10px] tracking-widest text-white/50 flex flex-col items-center gap-2">
+                        <span>SCROLL</span>
+                        <div className="w-[1px] h-8 bg-gradient-to-b from-white/50 to-transparent"></div>
+                    </div>
+                </div>
+                <LiveTelemetry />
+            </div>
+        );
+
+        const useScrambleText = (targetText, duration = 1500) => {
+            const [text, setText] = useState('');
+            useEffect(() => {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()';
+                let frame;
+                const start = Date.now();
+                const tick = () => {
+                    const elapsed = Date.now() - start;
+                    const progress = elapsed / duration;
+                    if (progress >= 1) {
+                        setText(targetText);
+                        return;
+                    }
+                    let scrambled = '';
+                    for (let i = 0; i < targetText.length; i++) {
+                        if (Math.random() < progress) scrambled += targetText[i];
+                        else scrambled += chars[Math.floor(Math.random() * chars.length)];
+                    }
+                    setText(scrambled);
+                    frame = requestAnimationFrame(tick);
+                };
+                tick();
+                return () => cancelAnimationFrame(frame);
+            }, [targetText, duration]);
+            return text;
+        };
+
+        const BootSequence = ({ onComplete }) => {
+            const [fading, setFading] = useState(false);
+            const title = useScrambleText('VIMAAN', 1500);
+
+            useEffect(() => {
+                const t1 = setTimeout(() => setFading(true), 3000);
+                const t2 = setTimeout(onComplete, 3800);
+                return () => { clearTimeout(t1); clearTimeout(t2); };
+            }, [onComplete]);
+
+            return (
+                <div className={`absolute inset-0 z-[100] premium-bg flex flex-col items-center justify-center transition-opacity duration-700 ${fading ? 'opacity-0' : 'opacity-100'} cursor-none`}>
+                    <div className="max-w-xs w-full px-6">
+                        <h1 className="font-display text-2xl font-medium tracking-[0.4em] mb-8 text-center text-white uppercase">{title}</h1>
+                        <div className="w-full h-[1px] bg-white/10 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 h-full bg-white boot-progress shadow-[0_0_10px_#ffffff]"></div>
+                        </div>
+                        <div className="mt-6 flex justify-between font-mono text-[8px] tracking-[0.2em] text-white/40 uppercase">
+                            <span>Decrypting Assets</span>
+                            <span>Linking AEGIS</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const MagneticButton = ({ children }) => {
+            const ref = useRef(null);
+            const [position, setPosition] = useState({ x: 0, y: 0 });
+
+            const handleMouseMove = (e) => {
+                const { clientX, clientY } = e;
+                const { height, width, left, top } = ref.current.getBoundingClientRect();
+                const x = clientX - (left + width / 2);
+                const y = clientY - (top + height / 2);
+                setPosition({ x: x * 0.2, y: y * 0.2 });
+            };
+
+            const handleMouseLeave = () => setPosition({ x: 0, y: 0 });
+
+            return (
+                <button
+                    ref={ref}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                    className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest text-white/80 hover:text-white transition-colors group relative cursor-none"
+                    style={{ transform: `translate(${position.x}px, ${position.y}px)`, transition: 'transform 0.1s ease-out' }}
+                >
+                    <span>{children}</span>
+                    <div className="w-10 h-10 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-all">
+                        <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </button>
+            );
+        };
+
+        const CustomCursor = () => {
+            const cursorRef = useRef(null);
+
+            useEffect(() => {
+                const moveCursor = (e) => {
+                    if (cursorRef.current) {
+                        cursorRef.current.style.left = `${e.clientX}px`;
+                        cursorRef.current.style.top = `${e.clientY}px`;
+                    }
+                };
+                const addHover = () => cursorRef.current?.classList.add('cursor-hover');
+                const removeHover = () => cursorRef.current?.classList.remove('cursor-hover');
+
+                window.addEventListener('mousemove', moveCursor);
+                document.querySelectorAll('a, button').forEach(el => {
+                    el.addEventListener('mouseenter', addHover);
+                    el.addEventListener('mouseleave', removeHover);
+                });
+
+                return () => {
+                    window.removeEventListener('mousemove', moveCursor);
+                    document.querySelectorAll('a, button').forEach(el => {
+                        el.removeEventListener('mouseenter', addHover);
+                        el.removeEventListener('mouseleave', removeHover);
+                    });
+                };
+            }, []);
+
+            return <div id="custom-cursor" ref={cursorRef}></div>;
+        };
+
+        function App() {
+            const [booted, setBooted] = useState(false);
+            const scrollRef = useRef(null);
+            const [page, setPage] = useState(0);
+
+            const handleScroll = () => {
+                if (!scrollRef.current) return;
+                const max = scrollRef.current.scrollHeight - scrollRef.current.clientHeight;
+                const offset = max > 0 ? scrollRef.current.scrollTop / max : 0;
+                
+                let newPage = Math.min(6, Math.floor(offset / (1/7)));
+                if (offset > 0.95) newPage = 6; 
+
+                if (page !== newPage) setPage(newPage);
+            };
+
+            return (
+                <div className="w-full h-screen relative cursor-none">
+                    <CustomCursor />
+                    {!booted && <BootSequence onComplete={() => setBooted(true)} />}
+                    
+                    {booted && (
+                        <div className="relative w-full h-full premium-bg overflow-hidden cursor-none">
+                            <div className="noise-overlay"></div>
+                            <div className="absolute inset-0 hairline-grid opacity-20 pointer-events-none"></div>
+                            
+                            <HUDOverlay />
+                            <ThreeCanvas scrollRef={scrollRef} />
+
+                            <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 z-10 overflow-y-auto font-sans" style={{ scrollBehavior: 'smooth' }}>
+                                <div className="h-[700vh] w-full relative">
+                                    
+                                    <section className="absolute top-0 h-screen w-full flex items-center px-8 md:px-24 pointer-events-none">
+                                        <div className={`max-w-3xl reveal-base ${page === 0 ? 'reveal-active' : ''}`}>
+                                            <p className="font-mono text-[10px] tracking-[0.4em] text-aerospace mb-6 uppercase">System AEGIS</p>
+                                            <h1 className="font-display text-5xl md:text-7xl font-light tracking-tight leading-[1.05] text-white mb-8">
+                                                Beyond Surveillance.<br/>
+                                                <span className="font-medium text-white/90">We Engineer Action.</span>
+                                            </h1>
+                                            <p className="text-white/60 text-lg md:text-xl font-light max-w-xl leading-relaxed mb-10">
+                                                The Autonomous Emergency Grid & Inspection System. A hybrid aerial platform built to bridge the critical gap between disaster and response.
+                                            </p>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[100vh] h-screen w-full flex items-center justify-end px-8 md:px-24 pointer-events-none">
+                                        <div className={`max-w-xl text-right reveal-base ${page === 1 ? 'reveal-active' : ''}`}>
+                                            <h2 className="font-display text-4xl md:text-5xl font-light text-white mb-6 tracking-tight">
+                                                The Ground is <br/><span className="text-white/40 font-medium">Blind & Slow.</span>
+                                            </h2>
+                                            <p className="text-white/60 font-light text-lg leading-relaxed mb-10">
+                                                Urban emergencies suffer from gridlock. Traditional inspections of powerlines and wind farms are expensive, dangerous, and lack repeatable precision. Single-purpose drones cannot bridge the gap.
+                                            </p>
+                                            <div className="flex flex-col items-end gap-4 font-mono text-[10px] tracking-widest text-white/50 uppercase">
+                                                <span className="flex items-center gap-4"><span className="w-8 h-[1px] bg-white/20"></span> Traffic Delays // 8-12 Min Avg</span>
+                                                <span className="flex items-center gap-4"><span className="w-12 h-[1px] bg-white/20"></span> Manual Inspection // High Variance</span>
+                                                <span className="flex items-center gap-4"><span className="w-6 h-[1px] bg-white/20"></span> Single-Use Drones // Low Utility</span>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[200vh] h-screen w-full flex items-center px-8 md:px-24 pointer-events-none">
+                                        <div className={`max-w-2xl reveal-base ${page === 2 ? 'reveal-active' : ''}`}>
+                                            <p className="font-mono text-[10px] tracking-[0.3em] text-white/40 mb-4 uppercase">The Solution</p>
+                                            <h2 className="font-display text-4xl md:text-6xl font-medium text-white mb-8 tracking-tight">
+                                                1 Platform.<br/>3 Missions.
+                                            </h2>
+                                            <div className="premium-panel p-8 md:p-10 pointer-events-auto cursor-none">
+                                                <p className="text-white/70 font-light leading-relaxed mb-8 text-sm md:text-base">
+                                                    AEGIS introduces a true <strong className="font-medium text-white">Hybrid Control Paradigm</strong>. 
+                                                    Operators can take over on-demand via RC for high-precision rescues, while the autonomous system handles pre-programmed patrol routes and inspection grids with mathematical consistency.
+                                                </p>
+                                                <div className="flex flex-wrap gap-6 border-t border-white/10 pt-6">
+                                                    <span className="text-[10px] font-mono tracking-widest text-gold uppercase flex items-center gap-2"><div className="w-1 h-1 bg-gold rounded-full shadow-[0_0_8px_#E5C158]"></div> Disaster</span>
+                                                    <span className="text-[10px] font-mono tracking-widest text-aerospace uppercase flex items-center gap-2"><div className="w-1 h-1 bg-aerospace rounded-full shadow-[0_0_8px_#38bdf8]"></div> Surveillance</span>
+                                                    <span className="text-[10px] font-mono tracking-widest text-white/50 uppercase flex items-center gap-2"><div className="w-1 h-1 bg-white/50 rounded-full"></div> Infrastructure</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[300vh] h-screen w-full flex items-center px-8 md:px-24 pointer-events-none">
+                                        <div className={`max-w-xl reveal-base ${page === 3 ? 'reveal-active' : ''}`}>
+                                            <h2 className="font-display text-3xl md:text-5xl font-light text-white mb-12 tracking-tight">
+                                                Optical <br/><span className="font-medium text-white/80">Intelligence.</span>
+                                            </h2>
+                                            <div className="space-y-10">
+                                                <div className="flex gap-6">
+                                                    <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center shrink-0 bg-white/5"><Crosshair size={16} className="text-white/60" /></div>
+                                                    <div>
+                                                        <h3 className="font-mono text-[11px] tracking-widest text-white mb-3 uppercase">Live Aerial Surveillance</h3>
+                                                        <p className="text-white/60 text-sm font-light leading-relaxed">Real-time video feeds powered by YOLOv8 object detection. Automatically tagging person counts, vehicle types, and crowd densities.</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-6">
+                                                    <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center shrink-0 bg-white/5"><Flame size={16} className="text-white/60" /></div>
+                                                    <div>
+                                                        <h3 className="font-mono text-[11px] tracking-widest text-white mb-3 uppercase">Thermal Capabilities</h3>
+                                                        <p className="text-white/60 text-sm font-light leading-relaxed">Instantly track fire boundaries and locate heat signatures in low-visibility disaster zones.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[400vh] h-screen w-full flex items-center justify-end px-8 md:px-24 pointer-events-none">
+                                        <div className={`max-w-xl text-right reveal-base ${page === 4 ? 'reveal-active' : ''}`}>
+                                            <h2 className="font-display text-3xl md:text-5xl font-light text-white mb-12 tracking-tight">
+                                                Physical <br/><span className="font-medium text-white/80">Intervention.</span>
+                                            </h2>
+                                            <div className="space-y-10 flex flex-col items-end">
+                                                <div className="flex gap-6 flex-row-reverse text-right">
+                                                    <div className="w-10 h-10 rounded-full border border-gold/20 flex items-center justify-center shrink-0 bg-gold/5"><Package size={16} className="text-gold" /></div>
+                                                    <div>
+                                                        <h3 className="font-mono text-[11px] tracking-widest text-white mb-3 uppercase">Active Payload Delivery</h3>
+                                                        <p className="text-white/60 text-sm font-light leading-relaxed">Servo-triggered release drops first-aid kits or life jackets precisely on target before ground responders even arrive.</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-6 flex-row-reverse text-right">
+                                                    <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center shrink-0 bg-white/5"><Radio size={16} className="text-white/60" /></div>
+                                                    <div>
+                                                        <h3 className="font-mono text-[11px] tracking-widest text-white mb-3 uppercase">Loudspeaker Broadcast</h3>
+                                                        <p className="text-white/60 text-sm font-light leading-relaxed">Direct command-center-to-crowd audio channel. Provide evacuation instructions and real-time guidance from the sky.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[500vh] h-screen w-full flex items-center px-8 md:px-24 pointer-events-none">
+                                        <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[800px] h-[800px] pointer-events-none transition-opacity duration-1000 ${page === 5 ? 'opacity-30' : 'opacity-0'}`}>
+                                            <div className="absolute inset-0 radar-sweep"></div>
+                                            <div className="absolute inset-0 border border-aerospace/20 rounded-full"></div>
+                                            <div className="absolute inset-[100px] border border-aerospace/10 rounded-full"></div>
+                                        </div>
+
+                                        <div className={`premium-panel p-10 md:p-12 w-full max-w-md reveal-base relative z-10 ${page === 5 ? 'reveal-active' : ''}`}>
+                                            <div className="flex items-center gap-4 mb-8 border-b border-white/10 pb-6">
+                                                <MapIcon size={18} className="text-aerospace" />
+                                                <h3 className="font-mono text-[10px] text-white/60 tracking-[0.2em] uppercase">Automated Disaster Assessment</h3>
+                                            </div>
+                                            
+                                            <div className="space-y-6 font-mono text-[11px]">
+                                                <div>
+                                                    <span className="text-white/40 block mb-1">METHODOLOGY</span>
+                                                    <span className="text-white/90">GPS Perimeter Mapping</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-white/40 block mb-1">CALCULATION ENGINE</span>
+                                                    <span className="text-white/90">Shoelace Algorithm (Gauss's Area)</span>
+                                                </div>
+                                                <div className="pt-6 border-t border-white/10">
+                                                    <span className="text-white/40 block mb-3">GENERATED REPORT: AFFECTED AREA</span>
+                                                    <span className="font-display text-4xl font-light text-white tracking-tight">Instantly.</span>
+                                                </div>
+                                            </div>
+                                            <p className="text-white/50 text-xs mt-8 leading-relaxed font-sans font-light">
+                                                Produces a precise affected-area figure in m². Current assessments require surveyors on foot—AEGIS generates the same report in the time it takes to fly one circuit.
+                                            </p>
+                                        </div>
+                                    </section>
+
+                                    <section className="absolute top-[600vh] h-screen w-full flex flex-col justify-end pb-12 px-8 md:px-24 pointer-events-none">
+                                        <div className={`w-full reveal-base ${page === 6 ? 'reveal-active' : ''} pointer-events-auto`}>
+                                            <div className="mb-20">
+                                                <h3 className="font-mono text-[10px] tracking-widest text-white/40 mb-8 uppercase">Target Sectors</h3>
+                                                <div className="flex flex-wrap gap-3 md:gap-4 max-w-3xl">
+                                                    {['Municipal Corporations', 'Disaster Management', 'Power Utilities', 'Smart Cities', 'Port Security', 'Wind Farm Operators'].map(sector => (
+                                                        <div key={sector} className="px-5 py-2.5 rounded-full border border-white/10 text-[11px] font-light text-white/70 hover:bg-white/5 hover:border-white/30 hover:text-white transition-all cursor-none backdrop-blur-md">
+                                                            {sector}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between items-end gap-10">
+                                                <div className="space-y-5">
+                                                    <h1 className="font-display text-3xl md:text-4xl font-light text-white tracking-tight">Vimaan Dynamics</h1>
+                                                    <div className="font-mono text-xs text-white/50 space-y-1.5">
+                                                        <p className="uppercase tracking-widest text-[9px] text-white/30 mb-3">Lead Architects</p>
+                                                        <p className="text-white/80">Siddharth Parmar & Prajwal Kamble</p>
+                                                        <a href="mailto:psiddharth289@gmail.com" className="block hover:text-aerospace transition-colors cursor-none text-white/60">
+                                                            psiddharth289@gmail.com
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex flex-col items-end gap-6">
+                                                    <MagneticButton>Initiate Contact</MagneticButton>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="mt-20 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-mono text-white/30 uppercase tracking-widest">
+                                                <p>© 2026 VIMAAN DYNAMICS // ALL RIGHTS RESERVED.</p>
+                                                <p className="text-white/20">Designed & Built by Siddharth Parmar</p>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
